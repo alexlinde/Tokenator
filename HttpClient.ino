@@ -10,6 +10,8 @@
 #include <TrueRandom.h>
 #include <String.h>
 
+//#define TRACE_RESPONSE true
+
 void bodyComplete(String &aData);
 
 const char* kUserAgent = "Arduino/2.0";
@@ -46,6 +48,7 @@ tHttpState iHttpState = eNothing;
 uint16_t iStatusCode;
 uint16_t iContentLength;
 uint16_t iBodyLengthConsumed;
+uint16_t iPort;
 const char* statusPtr;
 String iServerName;
 String iURLPath;
@@ -55,6 +58,7 @@ String iData;
 boolean iChunked;
 uint16_t iChunkLength;
 boolean iKeepAlive;
+uint8_t timeout = 0;
 
 byte mac[6] = { 0x90, 0xA2, 0xDA, 0x00, 0x00, 0x00 };
 void setupMac() {
@@ -83,11 +87,12 @@ int startRequest(const char* aServerName, const uint16_t aPort, const char* aURL
   iStatusCode = 0;
   iBodyLengthConsumed = 0;
   iContentLength = -1;
+  timeout = 60;
   
   if (iClient.connected() && iKeepAlive) {
 //    Serial.println("still connected..");      
     // should also check port
-    if (iServerName.equals(String(aServerName))) {
+    if (iServerName.equals(String(aServerName)) && aPort == iPort) {
       // keep-alive
 //      Serial.println("sending headers on same connection");      
       sendHeaders();
@@ -99,6 +104,7 @@ int startRequest(const char* aServerName, const uint16_t aPort, const char* aURL
   }
 
   iServerName = aServerName;
+  iPort = aPort;
   
   // todo: we should keep-alive    
   if (!iClient.initConnection(aServerName, aPort)) {
@@ -123,8 +129,12 @@ void sendHeaders() {
   iClient.print(iURLPath);
   iClient.println(" HTTP/1.1");
   iClient.print("Host: ");
-  iClient.println(iServerName);
-  iClient.print("User-Agent: ");
+  iClient.print(iServerName);
+  if (80 != iPort) {
+    iClient.print(':');
+    iClient.print(iPort);
+  }  
+  iClient.print("\r\nUser-Agent: ");
   iClient.println(kUserAgent);
   if (iMethod == kMethodPOST) {
     iClient.println("Content-Type: text/plain");
@@ -141,7 +151,9 @@ void sendHeaders() {
 int read() {
     int ret = iClient.read();
     if (ret >= 0) {
-//      Serial.print((char)ret);
+#ifdef TRACE_RESPONSE      
+      Serial.print((char)ret);
+#endif
       if (iHttpState == eReadingBody) {
         iBodyLengthConsumed++;
       }
@@ -216,8 +228,6 @@ int pollHttp() {
       break;
   }
         
-  // todo: check timeout
-
   // get next character
   while (available()) {
     char c = read();
@@ -347,12 +357,15 @@ int pollHttp() {
     }
   }
   
-  if (!iClient.connected() && eIdle != iHttpState) {
-    iHttpState = eIdle;
-    iKeepAlive = false;
-    iClient.stop();
-    // hackhackhack
-    resetSocket();
+  if (eIdle != iHttpState) {
+    if (timeout) timeout--;
+    if (!iClient.connected() || !timeout) {
+      iHttpState = eIdle;
+      iKeepAlive = false;
+      iClient.stop();
+      // hackhackhack
+      resetSocket();
+    }
   }
   
   return HTTP_SUCCESS;

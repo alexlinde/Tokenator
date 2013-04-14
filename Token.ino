@@ -15,10 +15,11 @@
 static const int MINUTES_PER_COIN = 10;
 
 void initDisplay(uint8_t address);
-void enableDisplay(boolean state);
+//void enableDisplay(boolean state);
 void writeDisplay(void);
 void writeDigitNum(uint8_t d, uint8_t num);
 void drawColon(boolean state);
+void clearDisplay(void);
 
 int pollSocket();
 
@@ -75,15 +76,21 @@ void pulse() {
   }
 }
 
+bool flash = true;
+
 void showTime(uint16_t time, boolean colon) {
-    uint8_t mins = time / 60;
-    uint8_t secs = time % 60;
-    writeDigitNum(0,mins / 10);
-    writeDigitNum(1,mins % 10);
-    drawColon(colon);
-    writeDigitNum(3,secs / 10);
-    writeDigitNum(4,secs % 10);
-    writeDisplay();
+  clearDisplay();
+  uint8_t mins = time / 60;
+  uint8_t secs = time % 60;
+  writeDigitNum(0,mins / 10);
+  writeDigitNum(1,mins % 10);
+  drawDots(colon ? 0x02 : 0);
+  writeDigitNum(3,secs / 10);
+  writeDigitNum(4,secs % 10);
+  if (isEndpointConnected() || flash) {
+    drawDots(0x04);
+  }
+  writeDisplay();
 }
 
 // the loop routine runs over and over again forever:
@@ -94,7 +101,6 @@ uint16_t timerState = 10;
 uint16_t timerState = 30;
 #endif
 uint8_t state = 0; // startup
-bool flash = true;
 
 void addTime(uint16_t secs) {
   Serial.print("Adding ");
@@ -103,7 +109,7 @@ void addTime(uint16_t secs) {
   timeRemaining += secs;
   state = 2;
   flash = true;
-  enableDisplay(true);
+//  enableDisplay(true);
 }
 
 void loop() {    
@@ -122,7 +128,7 @@ void loop() {
     showTime(0,flash);
     if (!timerState) {
       // display off
-      enableDisplay(false);
+//      enableDisplay(false);
       state = 1;
     } else {
       if (!flash) {
@@ -130,6 +136,11 @@ void loop() {
       }
     }
   } else if (state == 1) {
+    clearDisplay();
+    if (isEndpointConnected() || flash) {
+      drawDots(0x04);
+    }      
+    writeDisplay();
     // paused
   } else if (state == 2) {
     // show timer

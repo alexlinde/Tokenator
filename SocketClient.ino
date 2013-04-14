@@ -4,11 +4,12 @@ int startRequest(const char* aServerName, const uint16_t aPort, const char* aURL
 boolean isReady();
 int pollHttp();
 
-const char* kHost = "salty-ridge-8671.herokuapp.com";
-const uint16_t kPort = 80;
-//const char* kHost = "192.168.1.26";
-//const uint16_t kPort = 5000;
+//const char* kHost = "salty-ridge-8671.herokuapp.com";
+//const uint16_t kPort = 80;
+const char* kHost = "192.168.1.26";
+const uint16_t kPort = 5000;
 const char* kBasePath = "/socket.io/1/";
+boolean iEndpointConnected = false;
 
 typedef enum {
     eStarting,
@@ -22,6 +23,8 @@ typedef enum {
 tSocketState iSocketState = eStarting;
 
 static char endpoint[128];
+
+boolean isEndpointConnected() { return iEndpointConnected; }
 
 void bodyComplete(String &aData) {
   switch (iSocketState) {
@@ -70,6 +73,7 @@ void bodyComplete(String &aData) {
       // 1 - success
       // 5::/arduino:{"name":"add","args":[600]} - event
       // 8 - noop
+//      Serial.println(aData);
       switch (aData.charAt(0)) {
         case '5':
         {
@@ -86,6 +90,7 @@ void bodyComplete(String &aData) {
         case '1':
         {
           // success - all good
+          iEndpointConnected = true;
           break;
         }
         case '8':
@@ -108,15 +113,18 @@ void bodyComplete(String &aData) {
 
 static uint8_t backoffCounter = 0;
 void resetSocket() {
+    iEndpointConnected = false;
     iSocketState = eStarting;
     // backoff for a bit
     backoffCounter = 30;
 }  
 
 static boolean doPoll = 0;
+static uint16_t lastTime = -1;
 int pollSocket() {
   if (pollHttp() != HTTP_SUCCESS) {
     resetSocket();
+    iEndpointConnected = false;
   }
     
   if (isReady()) {  
@@ -133,16 +141,20 @@ int pollSocket() {
       case ePolling:
         if (doPoll) {
           // poll
-          Serial.println("ePolling");
+//          Serial.println("ePolling");
           startRequest(kHost,kPort,endpoint,kMethodGET,0);
-        } else {
-          // send update
-          Serial.println("Sending update");
-          // 5::/arduino:{"name":"update","args":[60]}
-          char s[48];
-          sprintf(s,"5::/arduino:{\"name\":\"update\",\"args\":[%d]}",timeRemaining);
-          startRequest(kHost,kPort,endpoint,kMethodPOST,s);
           iSocketState = eMessage;
+        } else {
+          if (timeRemaining != lastTime) {
+            // send update
+    //          Serial.println("Sending update");
+            // 5::/arduino:{"name":"update","args":[60]}
+            char s[48];
+            sprintf(s,"5::/arduino:{\"name\":\"update\",\"args\":[%d]}",timeRemaining);
+            startRequest(kHost,kPort,endpoint,kMethodPOST,s);
+            iSocketState = eMessage;
+            lastTime = timeRemaining;
+          }
         }
         doPoll = !doPoll;
         break;

@@ -18,6 +18,17 @@ enum {
     HT16K33_BLINK_HALFHZ = 3
 };
 
+// 0x0002 => middle colon
+// 0x0004 => top-left dot
+// 0x0008 => bottom-left dot
+// 0x0010 => top-right dot
+enum {
+  MIDDLE_COLON = 0x02,
+  TOPLEFT_DOT = 0x04,
+  BOTTOMLEFT_DOT = 0x08,
+  TOPRIGHT_DOT = 0x10
+};
+
 // PGFEDCBA
 //        A
 //      -----
@@ -68,6 +79,10 @@ void initDisplay(uint8_t address) {
     setBrightness(15); // max brightness
 }
 
+void clearDisplay(void) {
+  memset(_displaybuffer,0,16);
+}
+
 void writeDisplay(void) {
     Wire.beginTransmission(_addr);
     Wire.write((uint8_t)0x00); // start at address $00
@@ -84,7 +99,8 @@ void writeDigitNum(uint8_t d, uint8_t num) {
     _displaybuffer[d] = numbertable[num];
 }
 
-void drawColon(boolean state) {
-    _displaybuffer[2] = (state ? 0x2 : 0);
+void drawDots(uint8_t mask) {
+
+    _displaybuffer[2] |= mask;
 }
 
