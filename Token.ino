@@ -9,12 +9,12 @@
 #include <NBEthernet.h>
 #include <util.h>
 
-#define DEBUG true // flag to turn on/off debugging
+#define DEBUG false // flag to turn on/off debugging
 #define Serial if(DEBUG)Serial
 
 static const int MINUTES_PER_COIN = 10;
 
-void initDisplay(uint8_t address = 0x70);
+void initDisplay(uint8_t address);
 void enableDisplay(boolean state);
 void writeDisplay(void);
 void writeDigitNum(uint8_t d, uint8_t num);

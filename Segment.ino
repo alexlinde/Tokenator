@@ -48,12 +48,11 @@ static const uint8_t numbertable[] = {
 void setBrightness(uint8_t b) {
     if (b > 15) b = 15;
     Wire.beginTransmission(_addr);
-    Wire.write(0xE0 | b);
+    Wire.write(HT16K33_CMD_BRIGHTNESS | b);
     Wire.endTransmission();
 }
 
 void enableDisplay(boolean state) {
-    //  Serial.println((state ? HT16K33_SETUP_ON : 0));
     Wire.beginTransmission(_addr);
     Wire.write(HT16K33_SETUP_CMD | (state ? HT16K33_SETUP_ON : 0));  // turn on oscillator
     Wire.endTransmission();
@@ -64,6 +63,7 @@ void enableDisplay(boolean state) {
 
 void initDisplay(uint8_t address) {
     _addr = address;
+    Wire.begin(_addr);
     enableDisplay(true);
     setBrightness(15); // max brightness
 }

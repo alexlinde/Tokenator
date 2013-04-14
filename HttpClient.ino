@@ -78,6 +78,10 @@ int startRequest(const char* aServerName, const uint16_t aPort, const char* aURL
   iURLPath = aURLPath;
   iMethod = aMethod;
   iData = aData;
+  statusPtr = statusPrefix;
+  iStatusCode = 0;
+  iBodyLengthConsumed = 0;
+  iContentLength = -1;
   
   if (iClient.connected() && iKeepAlive) {
 //    Serial.println("still connected..");      
@@ -86,11 +90,7 @@ int startRequest(const char* aServerName, const uint16_t aPort, const char* aURL
       // keep-alive
 //      Serial.println("sending headers on same connection");      
       sendHeaders();
-      statusPtr = statusPrefix;
-      iStatusCode = 0;
       iHttpState = eRequestSent;
-      iBodyLengthConsumed = 0;
-      iContentLength = -1;
       return HTTP_SUCCESS;
     } else {
       iClient.stop();
@@ -189,18 +189,17 @@ int pollHttp() {
       return HTTP_SUCCESS;
     case eIdle:
       // todo: check if dhcp is still current      
-      Serial.println("idle");
+//      Serial.println("idle");
       return HTTP_SUCCESS;
     case eRequestStarted:
-//      Serial.println("eRequestStarted");
+      Serial.println("eRequestStarted");
       result = iClient.finishedConnecting();
       if (1 == result) {
           sendHeaders();
           iHttpState = eRequestSent;
-          statusPtr = statusPrefix;
-          iStatusCode = 0;
           return HTTP_SUCCESS;
       } else if (0 != result) {
+          Serial.println("Connection failed");
           iHttpState = eIdle;
           return HTTP_ERROR_CONNECTION_FAILED;
       }
@@ -343,6 +342,7 @@ int pollHttp() {
   
   if (!iClient.connected() && eIdle != iHttpState) {
     iHttpState = eIdle;
+    iKeepAlive = false;
     iClient.stop();
     // hackhackhack
     resetSocket();

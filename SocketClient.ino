@@ -4,9 +4,10 @@ int startRequest(const char* aServerName, const uint16_t aPort, const char* aURL
 boolean isReady();
 int pollHttp();
 
-//const char* kHost = "salty-ridge-8671.herokuapp.com";
-const char* kHost = "192.168.1.26";
-const uint16_t kPort = 5000;
+const char* kHost = "salty-ridge-8671.herokuapp.com";
+const uint16_t kPort = 80;
+//const char* kHost = "192.168.1.26";
+//const uint16_t kPort = 5000;
 const char* kBasePath = "/socket.io/1/";
 
 typedef enum {
@@ -105,8 +106,11 @@ void bodyComplete(String &aData) {
   }
 }
 
+static uint8_t backoffCounter = 0;
 void resetSocket() {
     iSocketState = eStarting;
+    // backoff for a bit
+    backoffCounter = 30;
 }  
 
 static uint8_t doPoll = 0;
@@ -114,26 +118,31 @@ int pollSocket() {
   if (pollHttp() != HTTP_SUCCESS) {
     resetSocket();
   }
-  
+    
   if (isReady()) {  
     switch (iSocketState) {
       case eStarting:
-        Serial.println("eStarting");
-        iSocketState = eHandshakeSent;
-        startRequest(kHost,kPort,kBasePath,kMethodGET,0);
+        if (backoffCounter) {
+          backoffCounter--;
+        } else {
+          Serial.println("eStarting");
+          iSocketState = eHandshakeSent;
+          startRequest(kHost,kPort,kBasePath,kMethodGET,0);
+        }
         break;
       case ePolling:
-        iSocketState = eMessage;
-        if (!doPoll) {
-//          Serial.println("ePolling");
-          startRequest(kHost,kPort,endpoint,kMethodGET,0);
-        } else {
-          // send latest time up to server
-//          Serial.println("Sending update");
+        if (0 == doPoll) {
+          // send update
+          Serial.println("Sending update");
           // 5::/arduino:{"name":"update","args":[60]}
           char s[48];
           sprintf(s,"5::/arduino:{\"name\":\"update\",\"args\":[%d]}",timeRemaining);
           startRequest(kHost,kPort,endpoint,kMethodPOST,s);
+          iSocketState = eMessage;
+        } else if (5 == doPoll) {
+          // otherwise poll
+          Serial.println("ePolling");
+          startRequest(kHost,kPort,endpoint,kMethodGET,0);
         }
         doPoll = ++doPoll % 10;
         break;
