@@ -3,13 +3,14 @@
 static uint8_t _addr;
 static uint16_t _displaybuffer[8];
 
-const static uint8_t HT16K33_SETUP_CMD = 0x20;
-const static uint8_t HT16K33_SETUP_ON = 0x01;
+const uint8_t HT16K33_SETUP_CMD = 0x20;
+const uint8_t HT16K33_SETUP_ON = 0x01;
 
-const static uint8_t HT16K33_CMD_BRIGHTNESS = 0x0E;
+const uint8_t HT16K33_CMD_BRIGHTNESS = 0x0E;
 
-const static uint8_t HT16K33_BLINK_CMD = 0x80;
-const static uint8_t HT16K33_BLINK_DISPLAYON = 0x01;
+const uint8_t HT16K33_BLINK_CMD = 0x80;
+const uint8_t HT16K33_BLINK_DISPLAYON = 0x01;
+
 enum {
     HT16K33_BLINK_OFF = 0,
     HT16K33_BLINK_2HZ = 1,
@@ -61,7 +62,7 @@ void enableDisplay(boolean state) {
     Wire.endTransmission();
 }
 
-void initDisplay(uint8_t address = 0x70) {
+void initDisplay(uint8_t address) {
     _addr = address;
     enableDisplay(true);
     setBrightness(15); // max brightness
