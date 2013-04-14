@@ -113,7 +113,7 @@ void resetSocket() {
     backoffCounter = 30;
 }  
 
-static uint8_t doPoll = 0;
+static boolean doPoll = 0;
 int pollSocket() {
   if (pollHttp() != HTTP_SUCCESS) {
     resetSocket();
@@ -131,7 +131,11 @@ int pollSocket() {
         }
         break;
       case ePolling:
-        if (0 == doPoll) {
+        if (doPoll) {
+          // poll
+          Serial.println("ePolling");
+          startRequest(kHost,kPort,endpoint,kMethodGET,0);
+        } else {
           // send update
           Serial.println("Sending update");
           // 5::/arduino:{"name":"update","args":[60]}
@@ -139,12 +143,8 @@ int pollSocket() {
           sprintf(s,"5::/arduino:{\"name\":\"update\",\"args\":[%d]}",timeRemaining);
           startRequest(kHost,kPort,endpoint,kMethodPOST,s);
           iSocketState = eMessage;
-        } else if (5 == doPoll) {
-          // otherwise poll
-          Serial.println("ePolling");
-          startRequest(kHost,kPort,endpoint,kMethodGET,0);
         }
-        doPoll = ++doPoll % 10;
+        doPoll = !doPoll;
         break;
       default:
         break;

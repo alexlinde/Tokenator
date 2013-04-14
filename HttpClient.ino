@@ -26,6 +26,7 @@ typedef enum {
     eNothing,
     eDhcpSent,
     eIdle,
+    eMaintain,
     eRequestStarted,
     eRequestSent,
     eReadingStatusCode,
@@ -187,10 +188,6 @@ int pollHttp() {
       }
       // still going
       return HTTP_SUCCESS;
-    case eIdle:
-      // todo: check if dhcp is still current      
-//      Serial.println("idle");
-      return HTTP_SUCCESS;
     case eRequestStarted:
       Serial.println("eRequestStarted");
       result = iClient.finishedConnecting();
@@ -205,10 +202,20 @@ int pollHttp() {
       }
       // still waiting
       return HTTP_SUCCESS;
+    case eIdle:
+      if (Ethernet.maintainNeeded() != DHCP_CHECK_NONE) {
+        iHttpState = eMaintain;
+      }
+      break;
+    case eMaintain:
+      if (Ethernet.maintainFinished()) {
+        iHttpState = eIdle;
+      }
+      break;    
     default:
       break;
   }
-    
+        
   // todo: check timeout
 
   // get next character

@@ -9,7 +9,7 @@
 #include <NBEthernet.h>
 #include <util.h>
 
-#define DEBUG false // flag to turn on/off debugging
+#define DEBUG true // flag to turn on/off debugging
 #define Serial if(DEBUG)Serial
 
 static const int MINUTES_PER_COIN = 10;
@@ -113,11 +113,7 @@ void loop() {
   // check for inserted coins
   if (coins) {
     digitalWrite(OE_LOW, HIGH); // enable
-#ifdef DEBUG
-    addTime(10);
-#else
     addTime(MINUTES_PER_COIN * 60);
-#endif
     coins--;
   }
   
@@ -145,11 +141,7 @@ void loop() {
         
       // flash for 30 secs then power down
       state = 0;
-#ifdef DEBUG
-      timerState = 10;
-#else
       timerState = 30;
-#endif
     } else {
       if (!flash) {
         timeRemaining--;
