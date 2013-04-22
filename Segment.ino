@@ -64,18 +64,15 @@ void setBrightness(uint8_t b) {
 }
 
 void enableDisplay(boolean state) {
-    Wire.beginTransmission(_addr);
-    Wire.write(HT16K33_SETUP_CMD | (state ? HT16K33_SETUP_ON : 0));  // turn on oscillator
-    Wire.endTransmission();
-    Wire.beginTransmission(_addr);
-    Wire.write(HT16K33_BLINK_CMD | (state ? HT16K33_BLINK_DISPLAYON : 0));
-    Wire.endTransmission();
 }
 
 void initDisplay(uint8_t address) {
     _addr = address;
     Wire.begin(_addr);
-    enableDisplay(true);
+    Wire.beginTransmission(_addr);
+    Wire.write(HT16K33_SETUP_CMD | HT16K33_SETUP_ON);  // turn on oscillator
+    Wire.write(HT16K33_BLINK_CMD | HT16K33_BLINK_DISPLAYON);
+    Wire.endTransmission();
     setBrightness(15); // max brightness
 }
 

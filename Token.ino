@@ -1,4 +1,5 @@
-
+#include <PString.h>
+#include <Streaming.h>
 #include <toneAC2.h>
 #include <SPI.h>
 #include <Dhcp.h>
@@ -15,7 +16,6 @@
 static const int MINUTES_PER_COIN = 10;
 
 void initDisplay(uint8_t address);
-//void enableDisplay(boolean state);
 void writeDisplay(void);
 void writeDigitNum(uint8_t d, uint8_t num);
 void drawColon(boolean state);
@@ -103,13 +103,10 @@ uint16_t timerState = 30;
 uint8_t state = 0; // startup
 
 void addTime(uint16_t secs) {
-  Serial.print("Adding ");
-  Serial.print(secs);
-  Serial.println(" seconds");
+  Serial << "Adding " << secs << " seconds";
   timeRemaining += secs;
   state = 2;
   flash = true;
-//  enableDisplay(true);
 }
 
 void loop() {    
@@ -127,8 +124,6 @@ void loop() {
   if (state == 0) {    
     showTime(0,flash);
     if (!timerState) {
-      // display off
-//      enableDisplay(false);
       state = 1;
     } else {
       if (!flash) {

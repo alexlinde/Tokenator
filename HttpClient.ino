@@ -8,11 +8,10 @@
 #include <util.h>
 #include <EEPROM.h>
 #include <TrueRandom.h>
-#include <String.h>
 
 //#define TRACE_RESPONSE true
 
-void bodyComplete(String &aData);
+void bodyComplete(uint16_t statusCode, const char *aData);
 
 const char* kUserAgent = "Arduino/2.0";
 const char* kContentLengthPrefix = "Content-Length: ";
@@ -22,7 +21,8 @@ const char* statusPrefix = "HTTP/*.* ";
 const char* kMethodGET = "GET";
 const char* kMethodPOST = "POST";
 
-const int MAX_RESPONSE = 128;
+const int MAX_RESPONSE = 48;
+const int MAX_POST = 48;
 
 typedef enum {
     eNothing,
@@ -50,11 +50,12 @@ uint16_t iContentLength;
 uint16_t iBodyLengthConsumed;
 uint16_t iPort;
 const char* statusPtr;
-String iServerName;
-String iURLPath;
-String iBuffer;
+char* ptr;
+char iServerName[64];
+char iURLPath[32];
+char iBuffer[MAX_RESPONSE+1];
 const char* iMethod;
-String iData;
+char iData[MAX_POST+1];
 boolean iChunked;
 uint16_t iChunkLength;
 boolean iKeepAlive;
@@ -80,21 +81,23 @@ int startRequest(const char* aServerName, const uint16_t aPort, const char* aURL
   if (eIdle != iHttpState)
     return HTTP_ERROR_API;
 
-  iURLPath = aURLPath;
+  strcpy(iURLPath,aURLPath);
   iMethod = aMethod;
-  iData = aData;
+  if (aData) {
+    strcpy(iData,aData);
+  } else {
+    iData[0] = 0;
+  }
   statusPtr = statusPrefix;
   iStatusCode = 0;
   iBodyLengthConsumed = 0;
   iContentLength = -1;
-  timeout = 60;
+  timeout = 30;
   
   if (iClient.connected() && iKeepAlive) {
-//    Serial.println("still connected..");      
     // should also check port
-    if (iServerName.equals(String(aServerName)) && aPort == iPort) {
+    if (strcmp(iServerName,aServerName) == 0 && aPort == iPort) {
       // keep-alive
-//      Serial.println("sending headers on same connection");      
       sendHeaders();
       iHttpState = eRequestSent;
       return HTTP_SUCCESS;
@@ -103,7 +106,7 @@ int startRequest(const char* aServerName, const uint16_t aPort, const char* aURL
     }
   }
 
-  iServerName = aServerName;
+  strcpy(iServerName,aServerName);
   iPort = aPort;
   
   // todo: we should keep-alive    
@@ -124,27 +127,19 @@ boolean isComplete() {
 }
 
 void sendHeaders() {
-  iClient.print(iMethod);
-  iClient.print(" ");
-  iClient.print(iURLPath);
-  iClient.println(" HTTP/1.1");
-  iClient.print("Host: ");
-  iClient.print(iServerName);
+  iClient << iMethod << ' ' << iURLPath << " HTTP/1.1" << endl;
+  iClient << "Host: " << iServerName;
   if (80 != iPort) {
-    iClient.print(':');
-    iClient.print(iPort);
+    iClient << ':' << iPort;
   }  
-  iClient.print("\r\nUser-Agent: ");
-  iClient.println(kUserAgent);
+  iClient << endl;
+  iClient << "User-Agent: " << kUserAgent << endl;
   if (iMethod == kMethodPOST) {
-    iClient.println("Content-Type: text/plain");
-    iClient.print("Content-Length: ");
-    iClient.println(iData.length());
+    iClient << "Content-Type: text/plain" << endl << kContentLengthPrefix << strlen(iData) << endl;
   }
-  iClient.println("Connection: keep-alive");
-  iClient.println();
+  iClient << kConnectionPrefix << "keep-alive" << endl << endl;
   if (iMethod == kMethodPOST) {
-    iClient.println(iData);
+    iClient << iData;
   }
 }
 
@@ -152,7 +147,7 @@ int read() {
     int ret = iClient.read();
     if (ret >= 0) {
 #ifdef TRACE_RESPONSE      
-      Serial.print((char)ret);
+      Serial << (char)ret;
 #endif
       if (iHttpState == eReadingBody) {
         iBodyLengthConsumed++;
@@ -194,21 +189,21 @@ int pollHttp() {
 //        Serial.println(Ethernet.localIP());
         return HTTP_SUCCESS;
       } else if (2 == result) {
-        Serial.println("DHCP failed");
+        Serial << "DHCP failed" << endl;
         iHttpState = eNothing;
         return HTTP_ERROR_CONNECTION_FAILED;
       }
       // still going
       return HTTP_SUCCESS;
     case eRequestStarted:
-      Serial.println("eRequestStarted");
+      Serial << "eRequestStarted" << endl;
       result = iClient.finishedConnecting();
       if (1 == result) {
           sendHeaders();
           iHttpState = eRequestSent;
           return HTTP_SUCCESS;
       } else if (0 != result) {
-          Serial.println("Connection failed");
+          Serial << "Connection failed" << endl;
           iHttpState = eIdle;
           return HTTP_ERROR_CONNECTION_FAILED;
       }
@@ -244,7 +239,7 @@ int pollHttp() {
             iHttpState = eReadingStatusCode;
           }
         } else {
-          Serial.println("failed to match http");
+          Serial << "failed to match http" << endl;
           return HTTP_ERROR_INVALID_RESPONSE;
         }
         break;
@@ -262,8 +257,9 @@ int pollHttp() {
         break;
       case eStatusCodeRead:
         if (c == '\n') {
+//          Serial << "HTTP_STATUS " << iStatusCode << endl;
           iHttpState = eReadingHeader;
-          iBuffer = String();
+          ptr = iBuffer;
           iChunked = false;
           iKeepAlive = false;
         }
@@ -271,36 +267,40 @@ int pollHttp() {
       case eReadingHeader:
         if (c == '\r') {
           // end of header, match
-          if (0 == iBuffer.length()) {
+          if (ptr == iBuffer) {
             // probably end of headers
             iHttpState = eLineStartingCRFound;
           } else {
-            if (iBuffer.startsWith(kContentLengthPrefix)) {
-              iBuffer = iBuffer.substring(iBuffer.indexOf(':') + 2);
-              iContentLength = iBuffer.toInt();
-  //            Serial.print("content size=");
-  //            Serial.println(iContentLength);
-            } else if (iBuffer.startsWith(kTransferEncodingPrefix)) {
-              iChunked = (toupper(iBuffer.charAt(iBuffer.indexOf(':') + 2)) == 'C');
+//            Serial << "CHECKING: " << iBuffer << endl;
+            if (strncmp(iBuffer,kContentLengthPrefix,16) == 0) {
+              iContentLength = atoi(iBuffer + 16);
+//              Serial << "content size " << iContentLength << endl;
+            } else if (strncmp(iBuffer,kTransferEncodingPrefix,19) == 0) {
+              iChunked = (toupper(iBuffer[19]) == 'C');
               iChunkLength = 0;
-            } else if (iBuffer.startsWith(kConnectionPrefix)) {
-              iKeepAlive = (toupper(iBuffer.charAt(iBuffer.indexOf(':') + 2)) == 'K');
+//              Serial << "chunked " << iChunked << endl;
+            } else if (strncmp(iBuffer,kConnectionPrefix,12) == 0) {
+              iKeepAlive = (toupper(iBuffer[12]) == 'K');
+//              Serial << "keep alive " << iKeepAlive << endl;
             }
             iHttpState = eSkipToEndOfHeader;
           }            
         } else {
-          iBuffer += c;
+          if ((ptr-iBuffer) < MAX_RESPONSE) {
+            *ptr++ = c;
+            *ptr = 0;
+          }
         }
         break;
       case eLineStartingCRFound:
         if (c == '\n') {
           iHttpState = (iChunked ? eReadChunk : eReadingBody);
-          iBuffer = String();
+          ptr = iBuffer;
         }
         break;
       case eSkipToEndOfHeader:
         if (c == '\n') {
-          iBuffer = String();
+          ptr = iBuffer;
           iHttpState = eReadingHeader;
         }
         break;
@@ -313,17 +313,18 @@ int pollHttp() {
             iChunkLength += (c - 'A' + 10);
         } else {
           iHttpState = eChunkStartingCRFound;
-//          Serial.print("chunk size=");
-//          Serial.println(iContentLength);
+//          Serial << "starting chunk size=" << iChunkLength << endl;
         }
         break;
       case eChunkStartingCRFound:
         if (c == '\n') {
           if (0 == iChunkLength) {
             // this was the last chunk
-//Serial.println("end of last chunk");
+            // todo: there can optionally be more headers followed by a blank line..
+            // ignore for now as we just absorb blank line at the start
+//            Serial << "end of last chunk" << endl;
             iHttpState = eIdle;
-            bodyComplete(iBuffer);
+            bodyComplete(iStatusCode, iBuffer);
           } else {
             iHttpState = eReadingBody;
           }
@@ -337,7 +338,8 @@ int pollHttp() {
         break;
       case eReadingBody:
         if (iBodyLengthConsumed < MAX_RESPONSE) {
-          iBuffer += c;
+          *ptr++ = c;
+          *ptr = 0;
         }
         if (iChunked) {
           iChunkLength--;
@@ -345,13 +347,13 @@ int pollHttp() {
             iHttpState = eChunkSkipToEnd;
           }
         } else if (endOfBodyReached()) {
-//          Serial.println("endOfBodyReached");
+//          Serial << "endOfBodyReached" << endl;
           // process response - there may be more than one chunk.. but for now, just ignore
           if (!iKeepAlive) {
             iClient.stop();
           }
           iHttpState = eIdle;
-          bodyComplete(iBuffer);
+          bodyComplete(iStatusCode, iBuffer);
         }          
         break;
     }

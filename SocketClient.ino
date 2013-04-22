@@ -4,10 +4,10 @@ int startRequest(const char* aServerName, const uint16_t aPort, const char* aURL
 boolean isReady();
 int pollHttp();
 
-//const char* kHost = "salty-ridge-8671.herokuapp.com";
-//const uint16_t kPort = 80;
-const char* kHost = "192.168.1.26";
-const uint16_t kPort = 5000;
+const char* kHost = "salty-ridge-8671.herokuapp.com";
+const uint16_t kPort = 80;
+//const char* kHost = "192.168.1.28";
+//const uint16_t kPort = 5000;
 const char* kBasePath = "/socket.io/1/";
 boolean iEndpointConnected = false;
 
@@ -22,47 +22,56 @@ typedef enum {
 
 tSocketState iSocketState = eStarting;
 
+static char sessionid[21];
 static char endpoint[128];
 
 boolean isEndpointConnected() { return iEndpointConnected; }
 
-void bodyComplete(String &aData) {
+void bodyComplete(uint16_t statusCode, const char *aData) {
   switch (iSocketState) {
     case eHandshakeSent:
     {
-//      Serial.println("eHandshakeSent");
+      Serial << "eHandshakeSent" << endl;
+      // handshake response, should be 200 ok
+// SESSIONID:HEARTBEAT-TIMEOUT:CONNECTION-TIMEOUT:TRANSPORT[,TRANSPORT]*
+// 4d4f185e96a7b:15:10:websocket,xhr-polling
       iSocketState = eTransportSent;
-      String s = kBasePath;
-      s += "xhr-polling/";
-      s += aData.substring(0,aData.indexOf(':'));
-      s.toCharArray(endpoint,128);
-//      Serial.println(endpoint);
+
+      // extract sessionid, ignore timeouts and transports for now - we're just going to poll
+      char *p = sessionid;
+      while (*aData && *aData != ':') {
+        *p++ = *aData++;
+      }
+
+      // build uri to open new connection
+      PString pe(endpoint, sizeof(endpoint));
+      pe << kBasePath << "xhr-polling/" << sessionid ; // << "?t=" << millis();
       startRequest(kHost,kPort,endpoint,kMethodGET,0);
       break;
     }
     case eTransportSent:
-      Serial.println("eTransportSent");
+      Serial << "eTransportSent" << endl;
       // 1:: - indicates connected successfully to the transport
-      if (aData.charAt(0) == '1') {
+      if (*aData == '1') {
         iSocketState = eEndpointSent;
         // now connect to endpoint
+//        PString pe(endpoint, sizeof(endpoint));
+//        pe << kBasePath << "xhr-polling/" << sessionid << "?t=" << millis();
         startRequest(kHost,kPort,endpoint,kMethodPOST,"1::/arduino");
       } else {
         // errrrrrror
-        Serial.println("ERROR");
+        Serial << "ERROR" << endl;
         resetSocket();
       }
       break;
     case eEndpointSent:
       // 1:: - indicates connected successfully to the transport
-      Serial.println("eEndpointSent");
-      if (aData.charAt(0) == '1') {
+      Serial << "eEndpointSent" << endl;
+      if (*aData == '1') {
         // success
-        iSocketState = eMessage;
-        // send first poll
-        startRequest(kHost,kPort,endpoint,kMethodGET,0);
+        iSocketState = ePolling;
       } else {
-        Serial.println("ERROR2");
+        Serial << "ERROR2" << endl;
         resetSocket();
       }       
       break;
@@ -74,16 +83,15 @@ void bodyComplete(String &aData) {
       // 5::/arduino:{"name":"add","args":[600]} - event
       // 8 - noop
 //      Serial.println(aData);
-      switch (aData.charAt(0)) {
+      switch (*aData) {
         case '5':
         {
           // just assume we have one parameter enclosed in []
-          Serial.println(aData);
-          int start = aData.indexOf('[');
-          int end = aData.indexOf(']');
-          if (-1 != start && -1 != end) {
-            String time = aData.substring(start+1,end);
-            addTime(time.toInt());
+          Serial << aData << endl;
+          char * p = strchr(aData, '[');
+          if (p) {
+            int time = atoi(p+1);
+            addTime(time);
           }
           break;
         }
@@ -100,8 +108,7 @@ void bodyComplete(String &aData) {
         }
         default:
         {
-          Serial.println("RECEIVED UNKNOWN MESSAGE TYPE");
-          Serial.println(aData);
+          Serial << "RECEIVED UNKNOWN MESSAGE TYPE" << endl << aData << endl;
           break;
         }
       }
@@ -133,7 +140,7 @@ int pollSocket() {
         if (backoffCounter) {
           backoffCounter--;
         } else {
-          Serial.println("eStarting");
+          Serial << "eStarting" << endl;
           iSocketState = eHandshakeSent;
           startRequest(kHost,kPort,kBasePath,kMethodGET,0);
         }
@@ -141,17 +148,25 @@ int pollSocket() {
       case ePolling:
         if (doPoll) {
           // poll
-//          Serial.println("ePolling");
+//          Serial << "ePolling - poll" << endl;
+//          PString pe(endpoint, sizeof(endpoint));
+//          pe << kBasePath << "xhr-polling/" << sessionid << "?t=" << millis();
           startRequest(kHost,kPort,endpoint,kMethodGET,0);
           iSocketState = eMessage;
         } else {
           if (timeRemaining != lastTime) {
+//            Serial << "ePolling - sending time" << endl;
             // send update
     //          Serial.println("Sending update");
             // 5::/arduino:{"name":"update","args":[60]}
             char s[48];
-            sprintf(s,"5::/arduino:{\"name\":\"update\",\"args\":[%d]}",timeRemaining);
+            PString ps(s,sizeof(s));
+            ps << "5::/arduino:{\"name\":\"update\",\"args\":[" << timeRemaining << "]}";
+
+//            PString pe(endpoint, sizeof(endpoint));
+//            pe << kBasePath << "xhr-polling/" << sessionid << "?t=" << millis();
             startRequest(kHost,kPort,endpoint,kMethodPOST,s);
+
             iSocketState = eMessage;
             lastTime = timeRemaining;
           }
