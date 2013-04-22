@@ -103,7 +103,7 @@ uint16_t timerState = 30;
 uint8_t state = 0; // startup
 
 void addTime(uint16_t secs) {
-  Serial << "Adding " << secs << " seconds";
+  Serial << "Adding " << secs << " seconds" << endl;
   timeRemaining += secs;
   state = 2;
   flash = true;

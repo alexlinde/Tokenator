@@ -71,6 +71,8 @@ void initDisplay(uint8_t address) {
     Wire.begin(_addr);
     Wire.beginTransmission(_addr);
     Wire.write(HT16K33_SETUP_CMD | HT16K33_SETUP_ON);  // turn on oscillator
+    Wire.endTransmission();
+    Wire.beginTransmission(_addr);
     Wire.write(HT16K33_BLINK_CMD | HT16K33_BLINK_DISPLAYON);
     Wire.endTransmission();
     setBrightness(15); // max brightness
